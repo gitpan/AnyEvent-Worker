@@ -5,6 +5,7 @@ package t::ActualWorker;
 sub new {my $pkg = shift;my $self = bless { @_ },$pkg;}
 sub test {my $self = shift;return "Result from $self->{some}: @_";}
 sub fail {my $self = shift;die "Fail from $self->{some}: @_";}
+sub failref {my $self = shift;die bless ["Fail from $self->{some}: @_"],"CustomException";}
 
 package t::ActualWorker2;
 
@@ -15,7 +16,7 @@ package main;
 
 use lib::abs "../lib";
 use Test::NoWarnings;
-use Test::More tests => 10+1;
+use Test::More tests => 13+1;
 use AnyEvent::Impl::Perl;
 use AnyEvent 5;
 use AnyEvent::Worker;
@@ -52,6 +53,15 @@ $worker1->do( fail => "FailData" , sub {
 });
 
 $cv->begin;
+$worker1->do( failref => "FailData" , sub {
+	shift;
+	AnyEvent::Util::guard { $cv->end; };
+	is ref $@, 'CustomException', 'failref: reference ok';
+	like $@->[0], qr/^Fail from object: FailData/, 'failref: error';
+	is_deeply \@_, [], 'failref: response';
+});
+
+$cv->begin;
 $worker2->do( "W2Data" , sub {
 	shift;
 	AnyEvent::Util::guard { $cv->end; };
@@ -78,4 +88,3 @@ $worker4->do( test => "SomeData" , sub {
 $cv->recv;
 
 #Test::NoWarnings::had_no_warnings;
-#done_testing( 11 );
